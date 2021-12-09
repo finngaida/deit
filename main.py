@@ -2,27 +2,26 @@
 # All rights reserved.
 import argparse
 import datetime
-import numpy as np
-import time
-import torch
-import torch.backends.cudnn as cudnn
 import json
-
+import time
 from pathlib import Path
 
+import numpy as np
+import torch
+import torch.backends.cudnn as cudnn
 from timm.data import Mixup
-from timm.models import create_model
 from timm.loss import LabelSmoothingCrossEntropy, SoftTargetCrossEntropy
-from timm.scheduler import create_scheduler
+from timm.models import create_model
 from timm.optim import create_optimizer
+from timm.scheduler import create_scheduler
 from timm.utils import NativeScaler, get_state_dict, ModelEma
 
+import utils
+from cait_models import cait_S24_224
 from datasets import build_dataset
 from engine import train_one_epoch, evaluate
 from losses import DistillationLoss
 from samplers import RASampler
-import models
-import utils
 
 
 def get_args_parser():
@@ -47,6 +46,8 @@ def get_args_parser():
     parser.add_argument('--model-ema-force-cpu', action='store_true', default=False, help='')
 
     # Optimizer parameters
+    parser.add_argument('--distributed', default=False, type=bool,
+                        help='Flag to train on multiple nodes (default: False)')
     parser.add_argument('--opt', default='adamw', type=str, metavar='OPTIMIZER',
                         help='Optimizer (default: "adamw"')
     parser.add_argument('--opt-eps', default=1e-8, type=float, metavar='EPSILON',
@@ -138,7 +139,7 @@ def get_args_parser():
     # Dataset parameters
     parser.add_argument('--data-path', default='/datasets01/imagenet_full_size/061417/', type=str,
                         help='dataset path')
-    parser.add_argument('--data-set', default='IMNET', choices=['CIFAR', 'IMNET', 'INAT', 'INAT19'],
+    parser.add_argument('--data-set', default='IMNET', choices=['CIFAR', 'IMNET', 'INAT', 'INAT19', 'tmh'],
                         type=str, help='Image Net dataset path')
     parser.add_argument('--inat-category', default='name',
                         choices=['kingdom', 'phylum', 'class', 'order', 'supercategory', 'family', 'genus', 'name'],
@@ -189,7 +190,7 @@ def main(args):
     dataset_train, args.nb_classes = build_dataset(is_train=True, args=args)
     dataset_val, _ = build_dataset(is_train=False, args=args)
 
-    if True:  # args.distributed:
+    if args.distributed:
         num_tasks = utils.get_world_size()
         global_rank = utils.get_rank()
         if args.repeated_aug:
@@ -238,14 +239,22 @@ def main(args):
             label_smoothing=args.smoothing, num_classes=args.nb_classes)
 
     print(f"Creating model: {args.model}")
-    model = create_model(
-        args.model,
-        pretrained=False,
-        num_classes=args.nb_classes,
-        drop_rate=args.drop,
-        drop_path_rate=args.drop_path,
-        drop_block_rate=None,
-    )
+    if args.model == 'CS24_224':
+        model = cait_S24_224(
+            pretrained=True,
+            # num_classes=args.nb_classes,
+            drop_rate=args.drop,
+            drop_path_rate=args.drop_path,
+        )
+    else:
+        model = create_model(
+            args.model,
+            pretrained=False,
+            num_classes=args.nb_classes,
+            drop_rate=args.drop,
+            drop_path_rate=args.drop_path,
+            drop_block_rate=None,
+        )
 
     if args.finetune:
         if args.finetune.startswith('https'):

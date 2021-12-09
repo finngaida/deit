@@ -1,13 +1,13 @@
 # Copyright (c) 2015-present, Facebook, Inc.
 # All rights reserved.
-import os
 import json
+import os
 
-from torchvision import datasets, transforms
-from torchvision.datasets.folder import ImageFolder, default_loader
-
-from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 from timm.data import create_transform
+from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
+from torchvision import datasets, transforms
+from torchvision.datasets import VisionDataset
+from torchvision.datasets.folder import ImageFolder, default_loader
 
 
 class INatDataset(ImageFolder):
@@ -53,6 +53,26 @@ class INatDataset(ImageFolder):
     # __getitem__ and __len__ inherited from ImageFolder
 
 
+class TMH(VisionDataset):
+    def __init__(self, root, train=True, transform=None, target_transform=None, loader=default_loader):
+        self.transform = transform
+        self.loader = loader
+        self.target_transform = target_transform
+
+        # TODO: load index
+        # load split
+        self.split = ['']
+
+    def __len__(self):
+        # TODO:
+        return len(self.split)
+
+    def __getitem__(self, item):
+        # TODO:
+        return self.split[item]
+
+
+
 def build_dataset(is_train, args):
     transform = build_transform(is_train, args)
 
@@ -71,6 +91,9 @@ def build_dataset(is_train, args):
         dataset = INatDataset(args.data_path, train=is_train, year=2019,
                               category=args.inat_category, transform=transform)
         nb_classes = dataset.nb_classes
+    elif args.data_set == 'tmh':
+        dataset = TMH(args.data_path, train=is_train, transform=transform)
+        nb_classes = 4
 
     return dataset, nb_classes
 
